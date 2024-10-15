@@ -1,0 +1,131 @@
+
+TYPE-POOLS: slis.
+
+DATA: lv_mandt TYPE mandt.
+
+SELECTION-SCREEN: BEGIN OF LINE, COMMENT 6(33) lv_1 FOR FIELD p_table.
+PARAMETERS p_table TYPE dd03l-tabname OBLIGATORY MEMORY ID dtb.
+SELECTION-SCREEN: END OF LINE, SKIP.
+
+SELECTION-SCREEN: BEGIN OF LINE, COMMENT 6(30) lv_2 FOR FIELD p_mandt.
+PARAMETERS p_mandt TYPE sy-mandt DEFAULT sy-mandt
+                 MATCHCODE OBJECT ddsef4clnt.
+SELECTION-SCREEN : END OF LINE, SKIP.
+
+SELECTION-SCREEN: BEGIN OF LINE, COMMENT 6(33) lv_3 FOR FIELD p_max.
+PARAMETERS p_max(3) TYPE n DEFAULT '200' OBLIGATORY.
+SELECTION-SCREEN END OF LINE.
+
+AT SELECTION-SCREEN.
+
+  PERFORM check_table.
+
+INITIALIZATION.
+  lv_1 = 'Table'.
+  lv_2 = 'Client'.
+  lv_3 = 'Maximum of records'.
+
+START-OF-SELECTION.
+
+  PERFORM display_data.
+
+*---------------------------------------------------------------------*
+*      Form  DISPLAY_DATA
+*---------------------------------------------------------------------*
+FORM display_data.
+  DATA: lr_data  TYPE REF TO data,
+        lr_table TYPE REF TO cl_salv_table.
+
+  FIELD-SYMBOLS: <lt_data> TYPE STANDARD TABLE.
+
+* Create internal table
+  CREATE DATA lr_data TYPE STANDARD TABLE OF (p_table)
+                       WITH NON-UNIQUE DEFAULT KEY.
+
+  ASSIGN lr_data->* TO <lt_data>.
+
+  SELECT SINGLE tabname
+    INTO p_table
+      FROM dd03l
+        WHERE tabname  EQ p_table
+         AND fieldname EQ 'MANDT'
+         AND as4local  EQ 'A'
+         AND as4vers   EQ '0000'
+         AND position  EQ '0001'
+         AND rollname IN ('MANDT','S_MANDT','SYMANDT').
+
+  IF sy-subrc EQ 0.
+    SELECT * UP TO p_max ROWS
+      FROM (p_table)
+        INTO CORRESPONDING FIELDS OF TABLE <lt_data>
+          WHERE mandt EQ p_mandt
+
+     ORDER BY PRIMARY KEY.
+  ELSE.
+
+    SELECT SINGLE tabname
+      INTO p_table
+        FROM dd03l
+          WHERE tabname  EQ p_table
+           AND fieldname EQ 'CLIENT'
+           AND as4local  EQ 'A'
+           AND as4vers   EQ '0000'
+           AND position  EQ '0001'
+           AND rollname  IN ('MANDT','S_MANDT','SYMANDT').
+
+    IF sy-subrc EQ 0.
+      SELECT * UP TO p_max ROWS
+        FROM (p_table)
+          INTO CORRESPONDING FIELDS OF TABLE <lt_data>
+            WHERE client EQ p_mandt
+
+       ORDER BY PRIMARY KEY.
+    ELSE.
+      SELECT * UP TO p_max ROWS
+        FROM (p_table)
+          INTO CORRESPONDING FIELDS OF TABLE <lt_data>
+
+       ORDER BY PRIMARY KEY.
+    ENDIF.
+  ENDIF.
+
+  IF <lt_data>[] IS INITIAL.
+*   No table entries found for specified key
+    MESSAGE i429(mo).
+    EXIT.
+  ENDIF.
+
+  CALL METHOD cl_salv_table=>factory
+    IMPORTING
+      r_salv_table = lr_table
+    CHANGING
+      t_table      = <lt_data>.
+
+  lr_table->display( ).
+ENDFORM.
+*---------------------------------------------------------------------*
+*      Form CHECK_TABLE
+*---------------------------------------------------------------------*
+FORM check_table.
+  DATA: lv_tabclass  TYPE tabclass,
+        lv_viewclass TYPE viewclass.
+
+* Read table category
+  SELECT SINGLE tabclass viewclass
+    INTO (lv_tabclass, lv_viewclass)
+      FROM dd02l
+        WHERE tabname  EQ p_table
+          AND as4local EQ 'A'
+          AND as4vers  EQ '0000'.
+
+  IF sy-subrc NE 0.
+*   Table & is not active in the Dictionary
+    MESSAGE e402(mo) WITH p_table.
+  ELSEIF lv_tabclass = 'INTTAB'.
+*It's a structure, not a table
+    MESSAGE e403(mo) WITH p_table.
+  ELSEIF lv_tabclass = 'VIEW' AND lv_viewclass NE 'D'.
+*   Only use views of type "Maintenance view"
+    MESSAGE e309(sv).
+  ENDIF.
+ENDFORM.
