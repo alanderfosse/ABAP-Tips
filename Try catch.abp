@@ -1,0 +1,34 @@
+DATA: lv_value  TYPE i,
+      lv_string TYPE string VALUE 'XYZ',
+      lv_cont   TYPE i,
+      lt_mara   TYPE TABLE OF mara,
+      lv_where  TYPE string VALUE 'SPRAS = LV_STRING'.
+
+DO 3 TIMES.
+  lv_cont = lv_cont + 1.
+
+  TRY.
+      CASE lv_cont.
+        WHEN 1.
+          lv_value = 1 / 0.
+        WHEN 2.
+          lv_value = 1 * lv_string.
+        WHEN 3.
+          SELECT *
+            FROM mara
+              INTO TABLE lt_mara
+                WHERE (lv_where).
+      ENDCASE.
+
+
+    CATCH cx_sy_zerodivide.
+      MESSAGE 'Division by zero not possible' TYPE 'I'.
+
+    CATCH cx_sy_conversion_no_number.
+      MESSAGE 'Calc NUM + CHAR' TYPE 'I'.
+
+    CATCH cx_sy_dynamic_osql_semantics.
+      MESSAGE 'Field not found in MARA table.' TYPE 'I'.
+
+  ENDTRY.
+ENDDO.
