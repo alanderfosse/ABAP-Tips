@@ -1,0 +1,102 @@
+
+CLASS lcl_report DEFINITION DEFERRED.
+DATA: go_report     TYPE REF TO lcl_report,
+      alv_container TYPE REF TO cl_gui_docking_container,
+      alv_grid      TYPE REF TO cl_gui_alv_grid,
+      gv_layout        TYPE lvc_s_layo,
+      gv_carrid     TYPE sflight-carrid.
+
+SELECTION-SCREEN: BEGIN OF BLOCK block_1 WITH FRAME TITLE TEXT-001.
+  SELECT-OPTIONS: s_carrid FOR gv_carrid.
+SELECTION-SCREEN: END   OF BLOCK block_1.
+
+
+CLASS lcl_report DEFINITION.
+  PUBLIC SECTION.
+    DATA: gt_data TYPE STANDARD TABLE OF sflight.
+    METHODS :
+      get_data,
+      generate_output,
+      toolbar      FOR EVENT toolbar OF cl_gui_alv_grid
+        IMPORTING e_object,
+      user_command FOR EVENT user_command OF cl_gui_alv_grid
+        IMPORTING e_ucomm.
+ENDCLASS.
+CLASS lcl_report IMPLEMENTATION.
+  METHOD get_data.
+    SELECT *
+      FROM sflight
+        INTO  TABLE me->gt_data
+          WHERE carrid IN s_carrid.
+
+    IF sy-dbcnt IS INITIAL.
+      MESSAGE s398(00) WITH 'No data selected'.
+    ENDIF.
+
+    EXPORT data = me->gt_data TO MEMORY ID sy-cprog.
+  ENDMETHOD.
+  METHOD generate_output.
+    DATA: lv_variant TYPE disvariant,
+          lv_repid   TYPE sy-repid.
+
+    IMPORT data = me->gt_data FROM MEMORY ID sy-cprog.
+    FREE MEMORY ID sy-cprog.
+
+    CHECK me->gt_data IS NOT INITIAL.
+
+    lv_repid = sy-repid.
+    lv_variant-report = sy-repid.
+    lv_variant-username = sy-uname.
+    gv_layout-zebra = 'X'.
+
+    CHECK alv_container IS INITIAL.
+
+    CREATE OBJECT alv_container
+      EXPORTING
+        repid     = lv_repid
+        dynnr     = sy-dynnr
+        side      = alv_container->dock_at_bottom
+        extension = 200.
+    CREATE OBJECT alv_grid
+      EXPORTING
+        i_parent = alv_container.
+
+    SET HANDLER : go_report->toolbar      FOR alv_grid.
+    SET HANDLER : go_report->user_command FOR alv_grid.
+
+    CALL METHOD alv_grid->set_table_for_first_display
+      EXPORTING
+        is_layout        = gv_layout
+        is_variant       = lv_variant
+        i_save           = 'U'
+        i_structure_name = 'SFLIGHT'
+      CHANGING
+        it_outtab        = me->gt_data.
+  ENDMETHOD.
+  METHOD toolbar.
+    DATA: lv_toolbar TYPE stb_button.
+
+    CLEAR lv_toolbar.
+
+    MOVE 'FC_SAVE' TO lv_toolbar-function.
+
+    lv_toolbar-icon = icon_system_save.
+
+    MOVE 'Save'(100) TO lv_toolbar-text.
+    MOVE 'Save'(100) TO lv_toolbar-quickinfo.
+    MOVE space TO lv_toolbar-disabled.
+
+    APPEND lv_toolbar TO e_object->mt_toolbar.
+  ENDMETHOD.
+  METHOD user_command.
+    IF e_ucomm = ' '.
+    ENDIF.
+  ENDMETHOD.
+ENDCLASS.
+
+INITIALIZATION.
+  CREATE OBJECT go_report.
+  go_report->generate_output( ).
+
+START-OF-SELECTION.
+  go_report->get_data( ).
