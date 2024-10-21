@@ -1,0 +1,61 @@
+CLASS lcl_scrambler DEFINITION.
+  PUBLIC SECTION.
+    METHODS: scramble IMPORTING  im_value         TYPE clike
+                      RETURNING  VALUE(re_svalue) TYPE string
+                      EXCEPTIONS cx_abap_random.
+
+  PRIVATE SECTION.
+    CONSTANTS: co_seed TYPE i VALUE 100.
+    TYPES: BEGIN OF ty_index,
+             index TYPE i,
+           END OF ty_index.
+ENDCLASS.
+CLASS lcl_scrambler IMPLEMENTATION.
+  METHOD scramble.
+    DATA: lv_length  TYPE i,
+          lv_min     TYPE i VALUE 0,
+          lv_max     TYPE i,
+          lo_prng    TYPE REF TO cl_abap_random_int,
+          lv_index   TYPE i,
+          lt_indexes TYPE STANDARD TABLE OF ty_index.
+
+    FIELD-SYMBOLS: <lfs_index> LIKE LINE OF lt_indexes.
+
+    lv_length = strlen( im_value ).
+    lv_max = lv_length - 1.
+
+* Create a random number generator to return random
+    CALL METHOD cl_abap_random_int=>create
+      EXPORTING
+        seed = co_seed
+        min  = lv_min
+        max  = lv_max
+      RECEIVING
+        prng = lo_prng.
+* Add the characters from the string in random order to
+* the result string:
+    WHILE strlen( re_svalue ) LT lv_length.
+      lv_index = lo_prng->get_next( ).
+      READ TABLE lt_indexes TRANSPORTING NO FIELDS
+      WITH KEY index = lv_index.
+      IF sy-subrc EQ 0.
+        CONTINUE.
+      ENDIF.
+      CONCATENATE re_svalue im_value+lv_index(1)
+      INTO re_svalue.
+      APPEND INITIAL LINE TO lt_indexes
+      ASSIGNING <lfs_index>.
+      <lfs_index>-index = lv_index.
+    ENDWHILE.
+  ENDMETHOD.
+ENDCLASS.
+
+START-OF-SELECTION.
+* Local Data Declarations:
+  DATA: lo_scrambler TYPE REF TO lcl_scrambler,
+        lv_scrambled TYPE string.
+* Use the scrambler to scramble around a word:
+  CREATE OBJECT lo_scrambler.
+*  To use space, use ALT+0160
+  lv_scrambled = lo_scrambler->scramble( 'Mario Rossi' ).
+  WRITE: / lv_scrambled.
