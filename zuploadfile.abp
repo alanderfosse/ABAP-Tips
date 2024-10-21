@@ -1,0 +1,80 @@
+
+CLASS lcl_file_manager DEFINITION.
+  PUBLIC SECTION.
+    CLASS-METHODS:
+      get_local_filename CHANGING ch_file TYPE string,
+      upload_file IMPORTING im_file TYPE string.
+ENDCLASS.
+CLASS lcl_file_manager IMPLEMENTATION.
+  METHOD get_local_filename.
+* Method-Local Data Declarations:
+    DATA: lt_files       TYPE filetable,
+          lv_retcode     TYPE i,
+          lv_user_action TYPE i.
+    FIELD-SYMBOLS:
+    <lfs_file> LIKE LINE OF lt_files.
+* Present the user with a dialog box to select the name
+* of the file he wants to upload:
+    CALL METHOD cl_gui_frontend_services=>file_open_dialog
+      EXPORTING
+        default_extension       = 'csv'
+        file_filter             = '.csv'
+      CHANGING
+        file_table              = lt_files
+        rc                      = lv_retcode
+        user_action             = lv_user_action
+      EXCEPTIONS
+        file_open_dialog_failed = 1
+        cntl_error              = 2
+        error_no_gui            = 3
+        not_supported_by_gui    = 4
+        OTHERS                  = 5.
+      
+    IF sy-subrc EQ 0.
+      IF lv_user_action NE
+      cl_gui_frontend_services=>action_cancel.
+        READ TABLE lt_files INDEX 1 ASSIGNING <lfs_file>.
+        
+        IF sy-subrc EQ 0.
+          ch_file = <lfs_file>-filename.
+        ENDIF.
+      ENDIF.
+    ELSE.
+      MESSAGE 'Could not determine target filename!'
+      TYPE 'I'.
+      RETURN.
+    ENDIF.
+  ENDMETHOD. " METHOD get_local_filename
+  METHOD upload_file.
+* Method-Local Data Declarations:
+    DATA: lt_file_payload TYPE string_table.
+    FIELD-SYMBOLS:
+    <lfs_file_record> LIKE LINE OF lt_file_payload.
+* Upload the file from the frontend:
+    CALL METHOD cl_gui_frontend_services=>gui_upload
+      EXPORTING
+        filename        = im_file
+      CHANGING
+        data_tab        = lt_file_payload
+      EXCEPTIONS
+        file_open_error = 1
+        OTHERS          = 19.
+    
+* Display the file records in an ABAP list:
+    LOOP AT lt_file_payload ASSIGNING <lfs_file_record>.
+      WRITE: / <lfs_file_record>.
+    ENDLOOP.
+  ENDMETHOD. " METHOD upload_file
+ENDCLASS.
+PARAMETERS:
+p_file TYPE string OBLIGATORY.
+
+AT SELECTION-SCREEN ON VALUE-REQUEST FOR p_file.
+* Show a dialog box to allow the user to select a file:
+  CALL METHOD lcl_file_manager=>get_local_filename
+    CHANGING
+      ch_file = p_file.
+
+START-OF-SELECTION.
+* Upload the file from the frontend:
+  CALL METHOD lcl_file_manager=>upload_file( p_file ).
